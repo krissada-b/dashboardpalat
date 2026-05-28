@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard V14 (Toggle Mode)</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body { background-color: #050a14; color: #cbd5e1; font-family: sans-serif; padding: 20px; }
+        .card { background: #0f172a; padding: 20px; border-radius: 10px; border: 1px solid #1e293b; margin-bottom: 20px; }
+        .summary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .sum-card { background: #1e293b; padding: 15px; border-radius: 8px; border-left: 4px solid #475569; }
+        .s-bad { border-left-color: #991b1b; } .s-mid { border-left-color: #92400e; } .s-good { border-left-color: #064e3b; }
+        
+        .row-main { background: #1e293b !important; color: #60a5fa !important; font-weight: bold; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 12px; border-bottom: 1px solid #1e293b; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .bg-bad { background: #7f1d1d; color: #fecaca; } .bg-mid { background: #78350f; color: #fef3c7; } .bg-good { background: #064e3b; color: #d1fae5; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="container" style="max-width: 1000px; margin: auto;">
+    <h1>Dashboard V14 (Toggle & Comfort)</h1>
+    <div class="card">
+        <input type="file" id="fileInput" accept=".xlsx">
+        <select id="colSelect" style="margin-top:10px; display:none; background:#1e293b; color:#fff; padding:5px;"></select>
+    </div>
+    <div id="summaryBoard" class="summary-board"></div>
+    <div id="dashboard" class="card" style="display:none;"></div>
+</div>
+
+<script>
+    let globalMatrix = [];
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const wb = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+            globalMatrix = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1, defval: ""});
+            setupUI();
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    function setupUI() {
+        let startRowIdx = globalMatrix.findIndex(r => String(r[0]).includes("หมวดวิชา"));
+        let headers = globalMatrix[startRowIdx];
+        let sel = document.getElementById('colSelect');
+        sel.innerHTML = "";
+        for(let i=2; i<headers.length; i++) {
+            let opt = document.createElement('option');
+            opt.value = i; opt.text = headers[i];
+            sel.appendChild(opt);
+        }
+        sel.style.display = "block";
+        sel.onchange = render;
+        render();
+    }
+
+    function getStatus(pct) {
+        if(pct >= 80) return { label: "ยอดเยี่ยม", class: "bg-good" };
+        if(pct >= 50) return { label: "ประคองตัว", class: "bg-mid" };
+        return { label: "วิกฤต", class: "bg-bad" };
+    }
+
+    function render() {
+        let startRowIdx = globalMatrix.findIndex(r => String(r[0]).includes("หมวดวิชา"));
+        let colIdx = document.getElementById('colSelect').value || 2;
+        let mainItems = [], currentMain = null;
+
+        for(let i = startRowIdx + 1; i < globalMatrix.length; i++) {
+            let row = globalMatrix[i];
+            if(!row[0]) continue;
+            let isMain = /^[1-7]\./.test(row[0]);
+            let val = String(row[colIdx] || "").replace(/'/g, '');
+            let [s, m] = val.includes('/') ? val.split('/').map(Number) : [parseFloat(val)||0, parseFloat(row[1])||0];
+            
+            let item = { name: row[0], s, m, isMain, subs: [], id: i };
+            if(isMain) { mainItems.push(item); currentMain = item; }
+            else if(currentMain) { currentMain.subs.push(item); currentMain.s += s; currentMain.m += m; }
+        }
+
+        let sumHtml = "";
+        mainItems.forEach(item => {
+            let pct = item.m > 0 ? (item.s/item.m*100) : 0;
+            let st = pct >= 80 ? "s-good" : pct >= 50 ? "s-mid" : "s-bad";
+            sumHtml += `<div class='sum-card ${st}'><div style="font-size:0.75rem">${item.name}</div><div style="font-size:1.1rem; font-weight:bold">${item.s}/${item.m}</div></div>`;
+        });
+        document.getElementById('summaryBoard').innerHTML = sumHtml;
+
+        let tableHtml = "<table><tr><th>หัวข้อ (คลิกแถบสีเพื่อย่อ/ขยาย)</th><th>คะแนน</th><th>สถานะ</th></tr>";
+        mainItems.forEach(item => {
+            let statMain = getStatus(item.m > 0 ? (item.s/item.m*100) : 0);
+            tableHtml += `<tr class='row-main' onclick="toggleRows('rows-${item.id}')">
+                <td>📁 ${item.name}</td><td>${item.s}/${item.m}</td>
+                <td><span class='badge ${statMain.class}'>${statMain.label}</span></td>
+            </tr>`;
+            item.subs.forEach(sub => {
+                let statSub = getStatus(sub.m > 0 ? (sub.s/sub.m*100) : 0);
+                tableHtml += `<tr class='rows-${item.id}'>
+                    <td>&nbsp;&nbsp;📄 ${sub.name}</td><td>${sub.s}/${sub.m}</td>
+                    <td><span class='badge ${statSub.class}'>${statSub.label}</span></td>
+                </tr>`;
+            });
+        });
+        document.getElementById('dashboard').innerHTML = tableHtml + "</table>";
+        document.getElementById('dashboard').style.display = "block";
+    }
+
+    function toggleRows(className) {
+        document.querySelectorAll('.' + className).forEach(el => el.classList.toggle('hidden'));
+    }
+</script>
+</body>
+</html>
