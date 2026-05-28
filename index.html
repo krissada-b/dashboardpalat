@@ -2,29 +2,39 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard V14 (Toggle Mode)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard V14.3 (Smart Neutral)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        body { background-color: #050a14; color: #cbd5e1; font-family: sans-serif; padding: 20px; }
-        .card { background: #0f172a; padding: 20px; border-radius: 10px; border: 1px solid #1e293b; margin-bottom: 20px; }
-        .summary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .sum-card { background: #1e293b; padding: 15px; border-radius: 8px; border-left: 4px solid #475569; }
-        .s-bad { border-left-color: #991b1b; } .s-mid { border-left-color: #92400e; } .s-good { border-left-color: #064e3b; }
+        body { background-color: #050a14; color: #cbd5e1; font-family: sans-serif; padding: 10px; }
+        .container { max-width: 1000px; margin: auto; }
+        .card { background: #0f172a; padding: 15px; border-radius: 10px; border: 1px solid #1e293b; margin-bottom: 20px; }
         
+        .summary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .sum-card { background: #1e293b; padding: 10px; border-radius: 8px; border-left: 4px solid #475569; word-wrap: break-word; }
+        .s-bad { border-left-color: #991b1b; } .s-mid { border-left-color: #92400e; } .s-good { border-left-color: #064e3b; }
+        .s-neutral { border-left-color: #475569; opacity: 0.6; }
+        
+        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; min-width: 300px; }
         .row-main { background: #1e293b !important; color: #60a5fa !important; font-weight: bold; cursor: pointer; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 12px; border-bottom: 1px solid #1e293b; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .row-dimmed { opacity: 0.5; color: #64748b !important; }
+        td, th { padding: 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; word-wrap: break-word; }
+        
+        .badge { padding: 3px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; display: inline-block; }
         .bg-bad { background: #7f1d1d; color: #fecaca; } .bg-mid { background: #78350f; color: #fef3c7; } .bg-good { background: #064e3b; color: #d1fae5; }
+        .bg-neutral { background: #334155; color: #cbd5e1; }
         .hidden { display: none; }
+        
+        select { width: 100%; padding: 8px; margin-top: 10px; background: #1e293b; color: #fff; border: 1px solid #334155; }
     </style>
 </head>
 <body>
-<div class="container" style="max-width: 1000px; margin: auto;">
-    <h1>Dashboard V14 (Toggle & Comfort)</h1>
+<div class="container">
+    <h1>Dashboard V14.3</h1>
     <div class="card">
         <input type="file" id="fileInput" accept=".xlsx">
-        <select id="colSelect" style="margin-top:10px; display:none; background:#1e293b; color:#fff; padding:5px;"></select>
+        <select id="colSelect" style="display:none;"></select>
     </div>
     <div id="summaryBoard" class="summary-board"></div>
     <div id="dashboard" class="card" style="display:none;"></div>
@@ -57,7 +67,8 @@
         render();
     }
 
-    function getStatus(pct) {
+    function getStatus(pct, isZero) {
+        if(isZero) return { label: "ไม่ออก", class: "bg-neutral" };
         if(pct >= 80) return { label: "ยอดเยี่ยม", class: "bg-good" };
         if(pct >= 50) return { label: "ประคองตัว", class: "bg-mid" };
         return { label: "วิกฤต", class: "bg-bad" };
@@ -82,28 +93,36 @@
 
         let sumHtml = "";
         mainItems.forEach(item => {
-            let pct = item.m > 0 ? (item.s/item.m*100) : 0;
-            let st = pct >= 80 ? "s-good" : pct >= 50 ? "s-mid" : "s-bad";
-            sumHtml += `<div class='sum-card ${st}'><div style="font-size:0.75rem">${item.name}</div><div style="font-size:1.1rem; font-weight:bold">${item.s}/${item.m}</div></div>`;
+            let isZero = (item.m === 0);
+            let pct = !isZero ? (item.s/item.m*100) : 0;
+            let st = isZero ? "s-neutral" : (pct >= 80 ? "s-good" : pct >= 50 ? "s-mid" : "s-bad");
+            sumHtml += `<div class='sum-card ${st}'><div style="font-size:0.75rem">${item.name}</div><div style="font-size:1rem; font-weight:bold">${item.s}/${item.m}</div></div>`;
         });
         document.getElementById('summaryBoard').innerHTML = sumHtml;
 
-        let tableHtml = "<table><tr><th>หัวข้อ (คลิกแถบสีเพื่อย่อ/ขยาย)</th><th>คะแนน</th><th>สถานะ</th></tr>";
+        let tableHtml = "<table><tr><th>หัวข้อ</th><th>คะแนน</th><th>สถานะ</th></tr>";
         mainItems.forEach(item => {
-            let statMain = getStatus(item.m > 0 ? (item.s/item.m*100) : 0);
-            tableHtml += `<tr class='row-main' onclick="toggleRows('rows-${item.id}')">
+            let isZero = (item.m === 0);
+            let statMain = getStatus(isZero ? 0 : (item.s/item.m*100), isZero);
+            let rowClass = isZero ? "row-main row-dimmed" : "row-main";
+            
+            tableHtml += `<tr class='${rowClass}' onclick="toggleRows('rows-${item.id}')">
                 <td>📁 ${item.name}</td><td>${item.s}/${item.m}</td>
                 <td><span class='badge ${statMain.class}'>${statMain.label}</span></td>
             </tr>`;
+            
             item.subs.forEach(sub => {
-                let statSub = getStatus(sub.m > 0 ? (sub.s/sub.m*100) : 0);
-                tableHtml += `<tr class='rows-${item.id}'>
-                    <td>&nbsp;&nbsp;📄 ${sub.name}</td><td>${sub.s}/${sub.m}</td>
+                let isSubZero = (sub.m === 0);
+                let statSub = getStatus(isSubZero ? 0 : (sub.s/sub.m*100), isSubZero);
+                let subClass = isSubZero ? "row-dimmed" : "";
+                tableHtml += `<tr class='rows-${item.id} hidden ${subClass}'>
+                    <td style="padding-left:20px;">📄 ${sub.name}</td><td>${sub.s}/${sub.m}</td>
                     <td><span class='badge ${statSub.class}'>${statSub.label}</span></td>
                 </tr>`;
             });
         });
-        document.getElementById('dashboard').innerHTML = tableHtml + "</table>";
+        
+        document.getElementById('dashboard').innerHTML = '<div class="table-wrapper">' + tableHtml + '</table></div>';
         document.getElementById('dashboard').style.display = "block";
     }
 
