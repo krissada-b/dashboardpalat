@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard V14.3 (Smart Neutral)</title>
+    <title>Dashboard V14.5 (Smart Parsing)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { background-color: #050a14; color: #cbd5e1; font-family: sans-serif; padding: 10px; }
@@ -12,6 +12,8 @@
         
         .summary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
         .sum-card { background: #1e293b; padding: 10px; border-radius: 8px; border-left: 4px solid #475569; word-wrap: break-word; }
+        .s-total { border-left: 4px solid #60a5fa !important; background: #1e293b !important; }
+        
         .s-bad { border-left-color: #991b1b; } .s-mid { border-left-color: #92400e; } .s-good { border-left-color: #064e3b; }
         .s-neutral { border-left-color: #475569; opacity: 0.6; }
         
@@ -31,7 +33,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>Dashboard V14.3</h1>
+    <h1>Dashboard V14.5</h1>
     <div class="card">
         <input type="file" id="fileInput" accept=".xlsx">
         <select id="colSelect" style="display:none;"></select>
@@ -78,20 +80,43 @@
         let startRowIdx = globalMatrix.findIndex(r => String(r[0]).includes("หมวดวิชา"));
         let colIdx = document.getElementById('colSelect').value || 2;
         let mainItems = [], currentMain = null;
+        let totalS = 0, totalM = 0;
 
         for(let i = startRowIdx + 1; i < globalMatrix.length; i++) {
             let row = globalMatrix[i];
             if(!row[0]) continue;
             let isMain = /^[1-7]\./.test(row[0]);
-            let val = String(row[colIdx] || "").replace(/'/g, '');
-            let [s, m] = val.includes('/') ? val.split('/').map(Number) : [parseFloat(val)||0, parseFloat(row[1])||0];
+            
+            // ปรับ logic การอ่านค่าที่นี่
+            let rawVal = String(row[colIdx] || "").trim();
+            let cleanVal = rawVal.replace(/'/g, '');
+            let s = 0, m = 0;
+
+            // ถ้าค่าว่างหรือมีแค่ ' ให้มองว่า 0/0 (ไม่ออกสอบ)
+            if (cleanVal === "") {
+                s = 0; m = 0;
+            } else if (cleanVal.includes('/')) {
+                let parts = cleanVal.split('/');
+                s = parseFloat(parts[0]) || 0;
+                m = parseFloat(parts[1]) || 0;
+            } else {
+                s = parseFloat(cleanVal) || 0;
+                // ถ้ามีค่า s แต่ไม่มี m ต้องไปเอาค่าจาก column [1] (คะแนนเต็ม)
+                m = parseFloat(row[1]) || 0;
+            }
             
             let item = { name: row[0], s, m, isMain, subs: [], id: i };
             if(isMain) { mainItems.push(item); currentMain = item; }
             else if(currentMain) { currentMain.subs.push(item); currentMain.s += s; currentMain.m += m; }
         }
 
-        let sumHtml = "";
+        mainItems.forEach(item => {
+            totalS += item.s;
+            totalM += item.m;
+        });
+
+        let sumHtml = `<div class='sum-card s-total'><div style="font-size:0.75rem">คะแนนรวมทั้งหมด</div><div style="font-size:1.2rem; font-weight:bold">${totalS}/${totalM}</div></div>`;
+        
         mainItems.forEach(item => {
             let isZero = (item.m === 0);
             let pct = !isZero ? (item.s/item.m*100) : 0;
